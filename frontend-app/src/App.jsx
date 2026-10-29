@@ -264,8 +264,8 @@ function ReportPage() {
   const fileInputRef = useRef(null);
   const [form, setForm] = useState({
     defect_type: 'pothole',
-    latitude: '40.7306',
-    longitude: '-73.9867',
+    latitude: '',
+    longitude: '',
     description: 'Large pothole near a pedestrian crossing and curb.',
     issueType: 'AI decides automatically',
   });
@@ -302,7 +302,7 @@ function ReportPage() {
         setStatus('Location updated.');
       },
       () => {
-        setStatus('Location access denied. Using the default map point.');
+        setStatus('Location access denied. Enter the coordinates manually to continue.');
       },
       { enableHighAccuracy: true, timeout: 15000 }
     );
@@ -344,7 +344,7 @@ function ReportPage() {
       }, 900);
     } catch (error) {
       console.error(error);
-      setStatus(error.message || 'Ticket queued locally. Backend sync will update when available.');
+      setStatus(error.message || 'Report could not be submitted. Please check your connection and try again.');
     } finally {
       setSubmitting(false);
     }
@@ -529,7 +529,8 @@ function ReportPage() {
 }
 
 function CommandCenterPage() {
-  const [tickets, setTickets] = useState(fallbackTickets);
+  const [tickets, setTickets] = useState([]);
+  const [loadError, setLoadError] = useState('');
   const [activeFilter, setActiveFilter] = useState('All statuses');
   const [loading, setLoading] = useState(true);
 
@@ -538,11 +539,12 @@ function CommandCenterPage() {
       try {
         const response = await fetch(`${apiBase}/api/tickets`);
         const data = await response.json();
-        if (Array.isArray(data) && data.length) {
-          setTickets(data);
-        }
+        if (!response.ok) throw new Error(data?.message || 'Unable to load tickets.');
+        if (Array.isArray(data)) setTickets(data);
+        else throw new Error('Unexpected ticket response from server.');
       } catch (error) {
-        console.warn('Using fallback ticket data', error);
+        console.warn('Ticket loading failed', error);
+        setLoadError(error.message || 'Unable to load tickets.');
       } finally {
         setLoading(false);
       }
@@ -585,9 +587,7 @@ function CommandCenterPage() {
       setTickets((current) => current.map((ticket) => (ticket._id === ticketId ? { ...ticket, ...updated } : ticket)));
     } catch (error) {
       console.error(error);
-      setTickets((current) =>
-        current.map((ticket) => (ticket._id === ticketId ? { ...ticket, status: nextStatus } : ticket))
-      );
+      window.alert(error.message || 'Status update failed. Please try again.');
     }
   };
 
@@ -645,6 +645,8 @@ function CommandCenterPage() {
           </div>
         </div>
 
+        {loadError && <div className="status-banner" role="alert">{loadError}</div>}
+        {!loading && !loadError && tickets.length === 0 && <div className="status-banner">No civic reports yet. Submit a report to populate the command center.</div>}
         <div className="stats-grid">
           {stats.map((stat) => (
             <div key={stat.label} className={`stat-card ${stat.tone}`}>
