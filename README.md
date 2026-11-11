@@ -9,6 +9,22 @@ Real-time civic issue triage, AI severity scoring, and authority dispatch comman
 3. Open the citizen report flow at `http://localhost:3000/report` or the command center at `http://localhost:3000/dashboard`.
 
 The AI service downloads `yolov8n.pt` on its first inference when a model is available. It also has a deterministic OpenCV fallback so the API remains usable in development without model weights.
+
+## Authentication
+
+The application has separate protected portals:
+
+- Citizen: `/login/citizen` or `/signup`
+- Field worker: `/login/worker`
+- Admin: `/login/admin`
+
+Public signup creates citizen accounts. Worker and admin accounts are provisioned by the service. Seeded development accounts use the password `CivicPulse123!`:
+
+- `admin@civicpulse.gov`
+- `worker.carlos@civicpulse.gov`
+- `supervisor.rajesh@civicpulse.gov`
+
+Set a strong `AUTH_SECRET` in `.env` before using the application outside local development.
 # CivicPulse AI
 
 A civic issue triage monorepo with:

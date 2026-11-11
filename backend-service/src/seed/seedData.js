@@ -2,17 +2,24 @@ import User from '../models/User.js';
 import Ticket from '../models/Ticket.js';
 import Assignment from '../models/Assignment.js';
 import Notification from '../models/Notification.js';
+import { hashPassword } from '../services/passwordService.js';
 
 export const seedDatabaseIfNeeded = async () => {
   try {
     const userCount = await User.countDocuments();
     if (userCount > 0) {
+      const demoPasswordHash = await hashPassword('CivicPulse123!');
+      await User.updateMany(
+        { password_hash: { $exists: false } },
+        { $set: { password_hash: demoPasswordHash } }
+      );
       return;
     }
 
     console.log('🌱 Seeding database with initial multi-portal users and demo civic tickets...');
 
     // 1. Create Users
+    const demoPasswordHash = await hashPassword('CivicPulse123!');
     const users = await User.create([
       {
         name: 'Sarah Jenkins',
@@ -85,7 +92,7 @@ export const seedDatabaseIfNeeded = async () => {
         assigned_ward: 'North Ward',
         avatar_url: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150',
       },
-    ]);
+    ].map((user) => ({ ...user, password_hash: demoPasswordHash })));
 
     const admin = users[0];
     const supervisor = users[1];

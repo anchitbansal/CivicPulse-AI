@@ -1,14 +1,22 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   getDemoUsers,
-  getCurrentUser,
   getNotifications,
+  loginUser,
+  signupUser,
   markNotificationRead,
   markAllNotificationsRead,
+  API_BASE,
 } from '../services/api';
 import { joinUser, leaveUser, joinRole, leaveRole, subscribeToNotifications } from '../services/socket';
 
 const AuthContext = createContext(null);
+
+function storeSession({ token, user }) {
+  localStorage.setItem('civicpulse_auth_token', token);
+  localStorage.setItem('civicpulse_active_user_id', user._id);
+  localStorage.setItem('civicpulse_active_role', user.role);
+}
 
 export const AuthProvider = ({ children }) => {
   const [demoUsers, setDemoUsers] = useState([]);
@@ -16,118 +24,117 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState([]);
 
-  // Load demo users and active user
+  const setSession = useCallback((session) => {
+    storeSession(session);
+    setCurrentUser(session.user);
+    joinUser(session.user._id);
+    joinRole(session.user.role);
+  }, []);
+
+  const logout = useCallback(() => {
+    const storedUserId = localStorage.getItem('civicpulse_active_user_id');
+    const storedRole = localStorage.getItem('civicpulse_active_role');
+    if (storedUserId) leaveUser(storedUserId);
+    if (storedRole) leaveRole(storedRole);
+    localStorage.removeItem('civicpulse_auth_token');
+    localStorage.removeItem('civicpulse_active_user_id');
+    localStorage.removeItem('civicpulse_active_role');
+    setCurrentUser(null);
+    setNotifications([]);
+  }, []);
+
   const initAuth = useCallback(async () => {
+    const token = localStorage.getItem('civicpulse_auth_token');
+    if (!token) {
+      setLoading(false);
+      return;
+    }
     try {
+      const response = await fetch(`${API_BASE}/api/auth/me-authenticated`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error('Session expired');
+      const user = await response.json();
+      setCurrentUser(user);
+      joinUser(user._id);
+      joinRole(user.role);
       const users = await getDemoUsers();
       setDemoUsers(users);
-
-      const storedUserId = localStorage.getItem('civicpulse_active_user_id');
-      let active = null;
-
-      if (storedUserId) {
-        active = users.find((u) => u._id === storedUserId);
-      }
-
-      // Default to admin or first user if none stored
-      if (!active && users.length > 0) {
-        active = users.find((u) => u.role === 'admin') || users[0];
-      }
-
-      if (active) {
-        setCurrentUser(active);
-        localStorage.setItem('civicpulse_active_user_id', active._id);
-        localStorage.setItem('civicpulse_active_role', active.role);
-        joinUser(active._id);
-        joinRole(active.role);
-      }
-    } catch (err) {
-      console.error('Failed to initialize demo auth:', err);
+    } catch {
+      localStorage.removeItem('civicpulse_auth_token');
+      localStorage.removeItem('civicpulse_active_user_id');
+      localStorage.removeItem('civicpulse_active_role');
+      setCurrentUser(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [logout]);
 
   useEffect(() => {
     initAuth();
   }, [initAuth]);
 
-  // Load notifications for active user
   const fetchUserNotifications = useCallback(async () => {
     if (!currentUser?._id) return;
     try {
-      const data = await getNotifications();
-      setNotifications(data);
-    } catch (err) {
-      console.warn('Failed to load notifications:', err.message);
+      setNotifications(await getNotifications());
+    } catch (error) {
+      console.warn('Failed to load notifications:', error.message);
     }
   }, [currentUser]);
 
   useEffect(() => {
     fetchUserNotifications();
-
-    const unsubscribe = subscribeToNotifications((newNotification) => {
-      setNotifications((prev) => [newNotification, ...prev]);
+    const unsubscribe = subscribeToNotifications((notification) => {
+      setNotifications((previous) => [notification, ...previous]);
     });
-
-    return () => {
-      unsubscribe();
-    };
+    return unsubscribe;
   }, [fetchUserNotifications]);
 
-  const switchUser = (newUser) => {
-    if (!newUser) return;
+  const signIn = async (credentials) => {
+    const session = await loginUser(credentials);
+    setSession(session);
+    return session.user;
+  };
 
-    if (currentUser) {
-      leaveUser(currentUser._id);
-      leaveRole(currentUser.role);
-    }
+  const signUp = async (details) => {
+    const session = await signupUser(details);
+    setSession(session);
+    return session.user;
+  };
 
-    setCurrentUser(newUser);
-    localStorage.setItem('civicpulse_active_user_id', newUser._id);
-    localStorage.setItem('civicpulse_active_role', newUser.role);
-    joinUser(newUser._id);
-    joinRole(newUser.role);
-    fetchUserNotifications();
+  const switchUser = (user) => {
+    if (!user || !currentUser) return;
+    setCurrentUser(user);
+    localStorage.setItem('civicpulse_active_user_id', user._id);
+    localStorage.setItem('civicpulse_active_role', user.role);
   };
 
   const handleMarkRead = async (id) => {
-    try {
-      await markNotificationRead(id);
-      setNotifications((prev) =>
-        prev.map((n) => (n._id === id ? { ...n, is_read: true } : n))
-      );
-    } catch (err) {
-      console.error(err);
-    }
+    await markNotificationRead(id);
+    setNotifications((previous) => previous.map((item) => (item._id === id ? { ...item, is_read: true } : item)));
   };
 
   const handleMarkAllRead = async () => {
-    if (!currentUser?._id) return;
-    try {
-      await markAllNotificationsRead();
-      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-    } catch (err) {
-      console.error(err);
-    }
+    await markAllNotificationsRead();
+    setNotifications((previous) => previous.map((item) => ({ ...item, is_read: true })));
   };
 
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
-
   return (
-    <AuthContext.Provider
-      value={{
-        currentUser,
-        currentRole: currentUser?.role || 'citizen',
-        demoUsers,
-        loading,
-        switchUser,
-        notifications,
-        unreadCount,
-        markNotificationRead: handleMarkRead,
-        markAllNotificationsRead: handleMarkAllRead,
-      }}
-    >
+    <AuthContext.Provider value={{
+      currentUser,
+      currentRole: currentUser?.role || null,
+      demoUsers,
+      loading,
+      signIn,
+      signUp,
+      logout,
+      switchUser,
+      notifications,
+      unreadCount: notifications.filter((item) => !item.is_read).length,
+      markNotificationRead: handleMarkRead,
+      markAllNotificationsRead: handleMarkAllRead,
+    }}>
       {children}
     </AuthContext.Provider>
   );
@@ -135,8 +142,6 @@ export const AuthProvider = ({ children }) => {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };

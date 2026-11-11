@@ -9,6 +9,7 @@ import workerRoutes from './routes/workers.js';
 import assignmentRoutes from './routes/assignments.js';
 import verificationRoutes from './routes/verifications.js';
 import notificationRoutes from './routes/notifications.js';
+import { authenticate, requireRole } from './middleware/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,12 +38,12 @@ app.get('/health', (_req, res) => {
 
 // Portal API routes
 app.use('/api/auth', authRoutes);
-app.use('/api/tickets', ticketRoutes);
-app.use('/api/workers', workerRoutes);
-app.use('/api/assignments', assignmentRoutes);
-app.use('/api/verifications', verificationRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/chat', chatRoutes);
+app.use('/api/tickets', authenticate, ticketRoutes);
+app.use('/api/workers', authenticate, requireRole('admin', 'supervisor'), workerRoutes);
+app.use('/api/assignments', authenticate, assignmentRoutes);
+app.use('/api/verifications', authenticate, verificationRoutes);
+app.use('/api/notifications', authenticate, notificationRoutes);
+app.use('/api/chat', authenticate, chatRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error('Unhandled server error:', err);

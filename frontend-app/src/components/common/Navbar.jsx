@@ -186,6 +186,12 @@ export default function Navbar() {
               {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
             </button>
 
+            {!currentUser && (
+              <div className="flex items-center gap-3 text-xs font-semibold">
+                <Link to="/login/citizen" className="text-brand-600 hover:underline">Sign in</Link>
+                <Link to="/signup" className="rounded-lg bg-brand-600 text-white px-3 py-1.5">Sign up</Link>
+              </div>
+            )}
             <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               PORTAL SYNCED

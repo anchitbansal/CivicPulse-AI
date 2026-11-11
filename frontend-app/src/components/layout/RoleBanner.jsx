@@ -14,10 +14,20 @@ import {
 } from 'lucide-react';
 
 export default function RoleBanner() {
-  const { currentUser, currentRole, demoUsers, switchUser, notifications, unreadCount, markNotificationRead, markAllNotificationsRead } = useAuth();
+  const { currentUser, currentRole, demoUsers, switchUser, logout, notifications, unreadCount, markNotificationRead, markAllNotificationsRead } = useAuth();
   const navigate = useNavigate();
   const [showBellMenu, setShowBellMenu] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+
+  if (!currentUser) {
+    return (
+      <div className="bg-slate-900 border-b border-slate-800 text-xs text-slate-300 px-4 py-2 flex justify-end gap-3">
+        <button type="button" onClick={() => navigate('/login/citizen')} className="hover:text-white">Citizen login</button>
+        <button type="button" onClick={() => navigate('/login/worker')} className="hover:text-white">Worker login</button>
+        <button type="button" onClick={() => navigate('/login/admin')} className="hover:text-white">Admin login</button>
+      </div>
+    );
+  }
 
   const getRoleIcon = (role) => {
     switch (role) {
@@ -208,6 +218,7 @@ export default function RoleBanner() {
           <span className="text-slate-200 font-semibold uppercase">
             {currentRole === 'admin' ? 'Command Center' : currentRole === 'worker' ? 'Field Ops' : 'Citizen'}
           </span>
+          <button type="button" onClick={logout} className="ml-3 text-slate-400 hover:text-white">Sign out</button>
         </div>
       </div>
     </div>

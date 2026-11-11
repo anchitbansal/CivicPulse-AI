@@ -1,21 +1,3 @@
-import mongoose from "mongoose";
-
-const ticketSchema = new mongoose.Schema({
-  defect_type: { type: String, required: true, index: true },
-  priority_score: { type: Number, required: true, min: 1, max: 100 },
-  severity: { type: String, enum: ["CRITICAL", "MEDIUM", "LOW"], required: true },
-  location: { type: { type: String, enum: ["Point"], default: "Point" }, coordinates: { type: [Number], required: true } },
-  exif_timestamp: Date,
-  before_image_url: String,
-  after_image_url: String,
-  status: { type: String, enum: ["Pending", "Assigned", "In Progress", "Resolved"], default: "Pending" },
-  upvote_count: { type: Number, default: 1 },
-  report_frequency: { type: Number, default: 1 },
-  zone: { type: String, default: "Central" },
-  ai_analysis: mongoose.Schema.Types.Mixed
-}, { timestamps: true });
-ticketSchema.index({ location: "2dsphere" });
-export default mongoose.model("Ticket", ticketSchema);
 import mongoose from 'mongoose';
 
 const statusMap = {
@@ -27,53 +9,26 @@ const statusMap = {
 
 const ticketSchema = new mongoose.Schema(
   {
-    title: {
-      type: String,
-      default: 'Civic Issue',
-    },
-    description: {
-      type: String,
-      default: '',
-    },
+    title: { type: String, default: 'Civic Issue' },
+    description: { type: String, default: '' },
     defect_type: {
       type: String,
       required: true,
       enum: ['pothole', 'garbage', 'sewage', 'streetlight', 'traffic_light', 'unknown'],
       index: true,
     },
-    priority_score: {
-      type: Number,
-      default: 50,
-      min: 0,
-      max: 100,
-    },
+    priority_score: { type: Number, default: 50, min: 0, max: 100 },
     severity: {
       type: String,
       enum: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'],
       default: 'MEDIUM',
     },
     location: {
-      type: {
-        type: String,
-        enum: ['Point'],
-        default: 'Point',
-      },
-      coordinates: {
-        type: [Number], // [lng, lat]
-        required: true,
-      },
-      address: {
-        type: String,
-        default: 'GPS Tagged Location',
-      },
-      ward: {
-        type: String,
-        default: 'Central Ward',
-      },
-      city: {
-        type: String,
-        default: 'Smart City',
-      },
+      type: { type: String, enum: ['Point'], default: 'Point' },
+      coordinates: { type: [Number], required: true },
+      address: { type: String, default: 'GPS Tagged Location' },
+      ward: { type: String, default: 'Central Ward' },
+      city: { type: String, default: 'Smart City' },
     },
     exif_timestamp: { type: Date, default: Date.now },
     before_image_url: { type: String, default: '' },
@@ -94,7 +49,6 @@ const ticketSchema = new mongoose.Schema(
         'PENDING_VERIFICATION',
         'RESOLVED',
         'REOPENED',
-        // Legacy compatibility
         'Pending',
         'Assigned',
         'In Progress',
@@ -102,27 +56,11 @@ const ticketSchema = new mongoose.Schema(
       ],
       default: 'REPORTED',
       index: true,
-      set: function (v) {
-        return statusMap[v] || v;
-      },
+      set: value => statusMap[value] || value,
     },
-    citizen_id: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      default: null,
-      index: true,
-    },
-    assigned_worker_id: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      default: null,
-      index: true,
-    },
-    assigned_supervisor_id: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      default: null,
-    },
+    citizen_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+    assigned_worker_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+    assigned_supervisor_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     resolution_proof: {
       images: [{ type: String }],
       completion_notes: { type: String, default: '' },
@@ -132,8 +70,8 @@ const ticketSchema = new mongoose.Schema(
     history: [
       {
         action: { type: String, required: true },
-        from_status: { type: String },
-        to_status: { type: String },
+        from_status: String,
+        to_status: String,
         performed_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
         performed_by_name: { type: String, default: 'System' },
         performed_by_role: { type: String, default: 'system' },
@@ -146,23 +84,19 @@ const ticketSchema = new mongoose.Schema(
     duplicate_count: { type: Number, default: 0 },
     duplicate_parent_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Ticket', default: null },
     confidence: { type: Number, default: 0 },
-    zone: { type: String, default: 'central' },
+    zone: { type: String, default: 'Central' },
     before_damage_pct: { type: Number, default: 0 },
     after_damage_pct: { type: Number, default: 0 },
+    ai_analysis: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { timestamps: true }
 );
 
 ticketSchema.index({ location: '2dsphere' });
 
-// Ensure legacy statuses normalize on save
-ticketSchema.pre('save', function (next) {
-  if (statusMap[this.status]) {
-    this.status = statusMap[this.status];
-  }
+ticketSchema.pre('save', function normalizeLegacyStatus(next) {
+  if (statusMap[this.status]) this.status = statusMap[this.status];
   next();
 });
 
-const Ticket = mongoose.models.Ticket || mongoose.model('Ticket', ticketSchema);
-
-export default Ticket;
+export default mongoose.models.Ticket || mongoose.model('Ticket', ticketSchema);

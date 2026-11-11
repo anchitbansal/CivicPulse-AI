@@ -15,6 +15,10 @@ const userSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    password_hash: {
+      type: String,
+      select: false,
+    },
     phone: {
       type: String,
       default: '',

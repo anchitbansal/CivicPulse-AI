@@ -21,6 +21,8 @@ import WorkerSubmitResolution from './components/worker/WorkerSubmitResolution';
 import AdminComplaintsManager from './components/admin/AdminComplaintsManager';
 import AdminVerificationQueue from './components/admin/AdminVerificationQueue';
 import AdminWorkerManager from './components/admin/AdminWorkerManager';
+import AuthPage from './components/auth/AuthPage';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 
 export default function App() {
   return (
@@ -32,28 +34,30 @@ export default function App() {
         <Routes>
           {/* Public & Core Landing */}
           <Route path="/" element={<LandingPage />} />
-          <Route path="/report" element={<ReportPage />} />
-          <Route path="/command-center" element={<CommandCenterPage />} />
+          <Route path="/report" element={<ProtectedRoute roles={['citizen']}><ReportPage /></ProtectedRoute>} />
+          <Route path="/command-center" element={<ProtectedRoute roles={['admin', 'supervisor']}><CommandCenterPage /></ProtectedRoute>} />
+          <Route path="/login/:role" element={<AuthPage />} />
+          <Route path="/signup" element={<AuthPage mode="signup" />} />
 
           {/* Citizen Portal */}
-          <Route path="/citizen/dashboard" element={<CitizenDashboard />} />
-          <Route path="/citizen/report" element={<ReportPage />} />
-          <Route path="/citizen/issues" element={<CitizenComplaintsList />} />
-          <Route path="/citizen/issues/:id" element={<CitizenComplaintDetail />} />
+          <Route path="/citizen/dashboard" element={<ProtectedRoute roles={['citizen']}><CitizenDashboard /></ProtectedRoute>} />
+          <Route path="/citizen/report" element={<ProtectedRoute roles={['citizen']}><ReportPage /></ProtectedRoute>} />
+          <Route path="/citizen/issues" element={<ProtectedRoute roles={['citizen']}><CitizenComplaintsList /></ProtectedRoute>} />
+          <Route path="/citizen/issues/:id" element={<ProtectedRoute roles={['citizen']}><CitizenComplaintDetail /></ProtectedRoute>} />
           <Route path="/citizen" element={<Navigate to="/citizen/dashboard" replace />} />
 
           {/* Worker / Field Specialist Portal */}
-          <Route path="/worker/dashboard" element={<WorkerDashboard />} />
-          <Route path="/worker/tasks" element={<WorkerTaskList />} />
-          <Route path="/worker/tasks/:id" element={<WorkerTaskDetail />} />
-          <Route path="/worker/tasks/:id/resolve" element={<WorkerSubmitResolution />} />
+          <Route path="/worker/dashboard" element={<ProtectedRoute roles={['worker', 'supervisor']}><WorkerDashboard /></ProtectedRoute>} />
+          <Route path="/worker/tasks" element={<ProtectedRoute roles={['worker', 'supervisor']}><WorkerTaskList /></ProtectedRoute>} />
+          <Route path="/worker/tasks/:id" element={<ProtectedRoute roles={['worker', 'supervisor']}><WorkerTaskDetail /></ProtectedRoute>} />
+          <Route path="/worker/tasks/:id/resolve" element={<ProtectedRoute roles={['worker', 'supervisor']}><WorkerSubmitResolution /></ProtectedRoute>} />
           <Route path="/worker" element={<Navigate to="/worker/dashboard" replace />} />
 
           {/* Admin Command Portal */}
-          <Route path="/admin/dashboard" element={<CommandCenterPage />} />
-          <Route path="/admin/complaints" element={<AdminComplaintsManager />} />
-          <Route path="/admin/verifications" element={<AdminVerificationQueue />} />
-          <Route path="/admin/workers" element={<AdminWorkerManager />} />
+          <Route path="/admin/dashboard" element={<ProtectedRoute roles={['admin']}><CommandCenterPage /></ProtectedRoute>} />
+          <Route path="/admin/complaints" element={<ProtectedRoute roles={['admin']}><AdminComplaintsManager /></ProtectedRoute>} />
+          <Route path="/admin/verifications" element={<ProtectedRoute roles={['admin']}><AdminVerificationQueue /></ProtectedRoute>} />
+          <Route path="/admin/workers" element={<ProtectedRoute roles={['admin']}><AdminWorkerManager /></ProtectedRoute>} />
           <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
 
           {/* Catch-all */}

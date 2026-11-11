@@ -2,10 +2,12 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
 
 const getHeaders = (extra = {}) => {
   const activeUserId = localStorage.getItem('civicpulse_active_user_id');
+  const token = localStorage.getItem('civicpulse_auth_token');
   const headers = { ...extra };
   if (activeUserId) {
     headers['x-user-id'] = activeUserId;
   }
+  if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
 };
 
@@ -23,6 +25,28 @@ export async function getCurrentUser() {
   });
   if (!res.ok) throw new Error('Failed to load user profile');
   return res.json();
+}
+
+export async function loginUser(credentials) {
+  const response = await fetch(`${API_BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(credentials),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Unable to sign in.');
+  return data;
+}
+
+export async function signupUser(details) {
+  const response = await fetch(`${API_BASE}/api/auth/signup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(details),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Unable to create account.');
+  return data;
 }
 
 // ==================== TICKETS ====================
