@@ -15,6 +15,10 @@ const getFallbackReply = (message) => {
     return 'Garbage or waste issues can be reported with a photo and the spot location. The system will score the risk, group nearby reports, and route it to the relevant team.';
   }
 
+  if (lower.includes('traffic') || lower.includes('signal')) {
+    return 'Traffic light or signal outages are high-priority hazards. Please report the exact intersection and damage. The system will flag it as critical infrastructure risk for rapid dispatch.';
+  }
+
   if (lower.includes('streetlight') || lower.includes('light')) {
     return 'If a streetlight is damaged or out, report the exact intersection and the lighting issue. The system flags safety risk and helps dispatch a maintenance crew faster.';
   }

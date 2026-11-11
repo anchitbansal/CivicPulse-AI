@@ -16,6 +16,7 @@ CATEGORY_WEIGHTS = {
     "garbage": 1.1,
     "sewage": 1.5,
     "streetlight": 1.0,
+    "traffic_light": 1.3,
     "unknown": 1.0,
 }
 

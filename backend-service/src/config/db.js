@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { seedDatabaseIfNeeded } from '../seed/seedData.js';
 
 let memoryServer;
 
@@ -14,6 +15,7 @@ export const connectDB = async () => {
     try {
       await mongoose.connect(configuredUri, { serverSelectionTimeoutMS: 5000 });
       console.log('MongoDB connected successfully using configured URI');
+      await seedDatabaseIfNeeded();
       return;
     } catch (error) {
       console.warn('Configured MongoDB URI failed; falling back to local in-memory database.', error.message);
@@ -32,6 +34,7 @@ export const connectDB = async () => {
     const uri = memoryServer.getUri('civicpulse');
     await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 });
     console.log('MongoDB connected successfully using in-memory fallback');
+    await seedDatabaseIfNeeded();
   } catch (error) {
     console.error('MongoDB unavailable in configured and fallback modes.', error.message);
   }
