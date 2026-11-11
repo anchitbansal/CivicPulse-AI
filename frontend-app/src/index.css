@@ -1,0 +1,133 @@
+@import 'leaflet/dist/leaflet.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-inter: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: var(--font-inter);
+    background-color: #F5F7FB;
+    color: #18243A;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .dark body {
+    background-color: #0B1220;
+    color: #F1F5F9;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.45);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Subtle dot-grid for GovTech aesthetic */
+.civic-grid-pattern {
+  background-image: radial-gradient(rgba(16, 27, 53, 0.08) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.civic-grid-pattern-dark {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Leaflet override fixes */
+.leaflet-container {
+  font-family: inherit !important;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  border-radius: inherit;
+}
+
+.dark .leaflet-container {
+  background-color: #0B1220 !important;
+}
+
+.dark .leaflet-tile-pane {
+  filter: brightness(0.65) invert(1) contrast(1.4) hue-rotate(200deg) saturate(0.3) brightness(0.85);
+}
+
+.dark .leaflet-bar a {
+  background-color: #111C2F !important;
+  color: #F1F5F9 !important;
+  border-bottom: 1px solid #1E2D4F !important;
+}
+
+.dark .leaflet-bar a:hover {
+  background-color: #17243A !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background-color: #0E1A38 !important;
+  color: #FFFFFF !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.4) !important;
+  padding: 2px !important;
+}
+
+.leaflet-popup-tip {
+  background-color: #0E1A38 !important;
+}
+
+.leaflet-popup-content {
+  margin: 10px 12px !important;
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+}
+
+/* Pulse badge animation */
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.15);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2.5s infinite ease-in-out;
+}

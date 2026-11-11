@@ -1,1 +1,26 @@
 <div id="root"></div><script type="module" src="/src/main.jsx"></script>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CivicPulse AI — Civic Intelligence &amp; Triage</title>
+    <meta name="description" content="AI-powered civic issue reporting, geospatial de-duplication, and verified resolution platform" />
+    <script>
+      (function() {
+        try {
+          const theme = localStorage.getItem('civicpulse-theme');
+          if (theme === 'dark') {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (_) {}
+      })();
+    </script>
+  </head>
+  <body class="bg-[#F5F7FB] dark:bg-[#0B1220] text-[#18243A] dark:text-[#F1F5F9] transition-colors duration-200">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
