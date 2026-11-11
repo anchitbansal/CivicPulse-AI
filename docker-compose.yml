@@ -1,0 +1,46 @@
+services:
+  mongo_db:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  ai_vision_service:
+    build: ./ai-vision-service
+    ports:
+      - "5000:5000"
+    environment:
+      - AI_SERVICE_PORT=5000
+    volumes:
+      - ./ai-vision-service:/app
+
+  backend_service:
+    build: ./backend-service
+    ports:
+      - "4000:4000"
+    environment:
+      - MONGO_URI=mongodb://mongo_db:27017/civicpulse
+      - AI_SERVICE_URL=http://ai_vision_service:5000
+      - CORS_ORIGIN=http://localhost:3000
+    depends_on:
+      - mongo_db
+      - ai_vision_service
+    volumes:
+      - ./backend-service:/app
+      - backend_uploads:/app/uploads
+
+  frontend_app:
+    build: ./frontend-app
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://localhost:4000
+      - VITE_SOCKET_URL=http://localhost:4000
+    depends_on:
+      - backend_service
+
+volumes:
+  mongo_data:
+  backend_uploads:

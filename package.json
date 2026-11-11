@@ -1,0 +1,10 @@
+{
+  "name": "civicpulse-ai",
+  "private": true,
+  "workspaces": ["backend-service", "frontend-app"],
+  "scripts": {
+    "install:all": "npm install --workspaces",
+    "build": "npm run build --workspace frontend-app",
+    "start:backend": "npm run dev --workspace backend-service"
+  }
+}
