@@ -1,48 +1,20 @@
 import express from 'express';
 import multer from 'multer';
+import mongoose from 'mongoose';
 import Ticket from '../models/Ticket.js';
-import User from '../models/User.js';
 import { analyzeImage, verifyResolution } from '../services/aiClient.js';
 import { saveBufferLocally } from '../services/storageService.js';
 import { dispatchNotification } from '../services/notificationService.js';
+import { requireRole } from '../middleware/auth.js';
+import {
+  ADMIN_STATUS_TRANSITIONS,
+  canAccessTicket,
+  canonicalStatus,
+  ticketListFilter,
+} from '../middleware/access.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
-
-const fallbackTickets = [
-  {
-    _id: 'fallback-1',
-    title: 'Hazardous crater on 5th Ave',
-    defect_type: 'pothole',
-    priority_score: 87,
-    severity: 'CRITICAL',
-    location: { type: 'Point', coordinates: [-73.9867, 40.7306], address: '5th Ave & E 21st St', ward: 'Central Ward' },
-    status: 'REPORTED',
-    zone: 'central',
-    report_frequency: 2,
-    upvote_count: 11,
-    before_damage_pct: 68,
-    after_damage_pct: 25,
-    confidence: 0.91,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    _id: 'fallback-2',
-    title: 'Overflowing commercial waste container',
-    defect_type: 'garbage',
-    priority_score: 56,
-    severity: 'MEDIUM',
-    location: { type: 'Point', coordinates: [-73.9831, 40.7387], address: 'Lexington Ave & 28th St', ward: 'North Ward' },
-    status: 'ASSIGNED',
-    zone: 'north',
-    report_frequency: 3,
-    upvote_count: 5,
-    before_damage_pct: 35,
-    after_damage_pct: 18,
-    confidence: 0.76,
-    createdAt: new Date().toISOString(),
-  },
-];
 
 const ALLOWED_DEFECT_TYPES = ['pothole', 'garbage', 'sewage', 'streetlight', 'traffic_light', 'unknown'];
 
@@ -112,8 +84,7 @@ const emitSocketEvent = (req, eventName, payload) => {
 // GET /api/tickets/my-reports (Tickets filed by current citizen)
 router.get('/my-reports', async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'] || req.query.userId;
-    const query = userId ? { citizen_id: userId } : {};
+    const query = { citizen_id: req.user._id };
     const tickets = await Ticket.find(query)
       .populate('assigned_worker_id', 'name email phone department')
       .sort({ createdAt: -1 })
@@ -127,8 +98,10 @@ router.get('/my-reports', async (req, res) => {
 // GET /api/tickets/assigned-to-me (Tickets assigned to current worker)
 router.get('/assigned-to-me', async (req, res) => {
   try {
-    const workerId = req.headers['x-user-id'] || req.query.workerId;
-    const query = workerId ? { assigned_worker_id: workerId } : {};
+    if (!['worker', 'supervisor'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'You do not have permission to access this resource.' });
+    }
+    const query = { assigned_worker_id: req.user._id };
     const tickets = await Ticket.find(query)
       .populate('citizen_id', 'name email phone')
       .sort({ priority_score: -1, createdAt: -1 })
@@ -142,9 +115,8 @@ router.get('/assigned-to-me', async (req, res) => {
 // GET /api/tickets/:id (Single ticket detail with history and relationships)
 router.get('/:id', async (req, res) => {
   try {
-    if (req.params.id.startsWith('fallback-')) {
-      const fb = fallbackTickets.find((t) => t._id === req.params.id) || fallbackTickets[0];
-      return res.json(fb);
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(404).json({ message: 'Ticket not found.' });
     }
 
     const ticket = await Ticket.findById(req.params.id)
@@ -155,6 +127,10 @@ router.get('/:id', async (req, res) => {
 
     if (!ticket) {
       return res.status(404).json({ message: 'Ticket not found.' });
+    }
+
+    if (!canAccessTicket(req.user, ticket)) {
+      return res.status(403).json({ message: 'You do not have permission to access this complaint.' });
     }
 
     return res.json(ticket);
@@ -168,7 +144,10 @@ router.get('/', async (req, res) => {
   const { status, zone, defect_type, priority, ward } = req.query;
 
   try {
-    const query = {};
+    const query = { ...ticketListFilter(req.user) };
+    if (req.user.role === 'supervisor' && ward && ward !== req.user.assigned_ward) {
+      return res.json([]);
+    }
     if (status) {
       if (status === 'Pending') {
         query.status = { $in: ['REPORTED', 'Pending'] };
@@ -193,14 +172,14 @@ router.get('/', async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    return res.json(tickets.length ? tickets : fallbackTickets);
+    return res.json(tickets);
   } catch (error) {
-    return res.json(fallbackTickets);
+    return res.status(500).json({ message: error.message || 'Failed to fetch tickets.' });
   }
 });
 
 // POST /api/tickets/report (Citizen reports civic defect)
-router.post('/report', upload.single('image'), async (req, res) => {
+router.post('/report', requireRole('citizen'), upload.single('image'), async (req, res) => {
   try {
     const {
       defect_type,
@@ -221,15 +200,7 @@ router.post('/report', upload.single('image'), async (req, res) => {
       return res.status(400).json({ message: 'Image file is required.' });
     }
 
-    // Identify citizen actor if passed via header or body
-    const citizenId = req.headers['x-user-id'] || req.body.citizen_id || null;
-    let citizenUser = null;
-    if (citizenId) {
-      citizenUser = await User.findById(citizenId);
-    } else {
-      // Default to first citizen if present
-      citizenUser = await User.findOne({ role: 'citizen' });
-    }
+    const citizenUser = req.user?.role === 'citizen' ? req.user : null;
 
     const lat = Number(latitude || 40.7306);
     const lng = Number(longitude || -73.9867);
@@ -359,22 +330,41 @@ router.post('/report', upload.single('image'), async (req, res) => {
 // PATCH /api/tickets/:id/status
 router.patch('/:id/status', async (req, res) => {
   const { status, notes } = req.body;
-  const actorId = req.headers['x-user-id'];
 
   try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ message: 'Only an administrator can change official complaint status.' });
+    }
+
+    const nextStatus = canonicalStatus(status);
+    if (!nextStatus) {
+      return res.status(400).json({ message: 'Invalid status.' });
+    }
+
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(404).json({ message: 'Ticket not found.' });
+    }
+
     const ticket = await Ticket.findById(req.params.id);
     if (!ticket) {
       return res.status(404).json({ message: 'Ticket not found.' });
     }
 
-    const actor = actorId ? await User.findById(actorId) : null;
-    const actorName = actor ? actor.name : 'System';
-    const actorRole = actor ? actor.role : 'system';
+    const allowed = ADMIN_STATUS_TRANSITIONS[ticket.status] || [];
+    if (!allowed.includes(nextStatus)) {
+      return res.status(409).json({
+        message: `Cannot change status from ${ticket.status} to ${nextStatus}.`,
+      });
+    }
+
+    const actor = req.user;
+    const actorName = actor.name;
+    const actorRole = actor.role;
 
     const prevStatus = ticket.status;
-    ticket.status = status;
+    ticket.status = nextStatus;
 
-    if (status === 'RESOLVED' || status === 'Resolved') {
+    if (nextStatus === 'RESOLVED') {
       const beforeFile = { buffer: Buffer.from(''), mimetype: 'image/jpeg', originalname: 'before.jpg' };
       const afterFile = { buffer: Buffer.from(''), mimetype: 'image/jpeg', originalname: 'after.jpg' };
       try {
@@ -389,25 +379,25 @@ router.patch('/:id/status', async (req, res) => {
     ticket.history.push({
       action: 'STATUS_UPDATED',
       from_status: prevStatus,
-      to_status: status,
-      performed_by: actor ? actor._id : null,
+      to_status: nextStatus,
+      performed_by: actor._id,
       performed_by_name: actorName,
       performed_by_role: actorRole,
-      notes: notes || `Status updated to ${status}`,
+      notes: notes || `Status updated to ${nextStatus}`,
       timestamp: new Date(),
     });
 
     await ticket.save();
 
     const io = req.app.get('io');
-    const isResolved = status === 'RESOLVED' || status === 'Resolved';
+    const isResolved = nextStatus === 'RESOLVED';
     emitSocketEvent(req, isResolved ? 'INCIDENT_RESOLVED' : 'INCIDENT_UPDATED', ticket.toObject());
 
     if (io) {
       io.to(`ticket:${ticket._id}`).emit('ticket:status_change', {
         ticketId: ticket._id,
         from_status: prevStatus,
-        to_status: status,
+        to_status: nextStatus,
         ticket,
       });
       io.to('role:admin').emit('INCIDENT_UPDATED', ticket.toObject());

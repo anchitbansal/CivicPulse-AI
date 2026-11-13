@@ -25,6 +25,7 @@ const notificationSchema = new mongoose.Schema(
         'resolution_submitted',
         'ticket_verified',
         'ticket_reopened',
+        'citizen_feedback',
       ],
       required: true,
     },

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "check": "node --check server.js"
+    "check": "node --check server.js",
+    "test": "node --test tests/authorization.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

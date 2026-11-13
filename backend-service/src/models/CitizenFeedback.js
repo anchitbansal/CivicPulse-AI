@@ -37,6 +37,8 @@ const citizenFeedbackSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+citizenFeedbackSchema.index({ ticket_id: 1, citizen_id: 1 }, { unique: true });
+
 const CitizenFeedback =
   mongoose.models.CitizenFeedback || mongoose.model('CitizenFeedback', citizenFeedbackSchema);
 

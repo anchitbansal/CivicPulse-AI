@@ -4,7 +4,14 @@ import User from '../models/User.js';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24;
 
 function getSecret() {
-  return process.env.AUTH_SECRET || 'development-only-change-this-secret';
+  const configuredSecret = process.env.AUTH_SECRET?.trim();
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  if (isProduction && (!configuredSecret || configuredSecret === 'development-only-change-this-secret')) {
+    throw new Error('AUTH_SECRET must be configured with a non-development value in production.');
+  }
+
+  return configuredSecret || 'development-only-change-this-secret';
 }
 
 function encode(value) {

@@ -3,11 +3,13 @@ import Ticket from '../models/Ticket.js';
 import User from '../models/User.js';
 import CitizenFeedback from '../models/CitizenFeedback.js';
 import { dispatchNotification } from '../services/notificationService.js';
+import { requireRole } from '../middleware/auth.js';
+import { sameId } from '../middleware/access.js';
 
 const router = express.Router();
 
 // Get tickets pending admin verification
-router.get('/pending', async (_req, res) => {
+router.get('/pending', requireRole('admin'), async (_req, res) => {
   try {
     const tickets = await Ticket.find({
       status: { $in: ['PENDING_VERIFICATION'] },
@@ -24,18 +26,21 @@ router.get('/pending', async (_req, res) => {
 });
 
 // Admin approves worker completion -> moves to RESOLVED
-router.post('/:ticketId/approve', async (req, res) => {
+router.post('/:ticketId/approve', requireRole('admin'), async (req, res) => {
   try {
     const { notes } = req.body;
-    const actorId = req.headers['x-user-id'];
 
     const ticket = await Ticket.findById(req.params.ticketId);
     if (!ticket) {
       return res.status(404).json({ message: 'Ticket not found.' });
     }
 
-    const admin = actorId ? await User.findById(actorId) : null;
-    const adminName = admin ? admin.name : 'Municipal Supervisor';
+    if (ticket.status !== 'PENDING_VERIFICATION') {
+      return res.status(409).json({ message: 'Only complaints pending verification can be approved.' });
+    }
+
+    const admin = req.user;
+    const adminName = admin.name;
 
     const prevStatus = ticket.status;
     ticket.status = 'RESOLVED';
@@ -44,7 +49,7 @@ router.post('/:ticketId/approve', async (req, res) => {
       action: 'VERIFIED_RESOLVED',
       from_status: prevStatus,
       to_status: 'RESOLVED',
-      performed_by: admin ? admin._id : null,
+      performed_by: admin._id,
       performed_by_name: adminName,
       performed_by_role: 'admin',
       notes: notes || 'Resolution proof inspected and approved.',
@@ -102,18 +107,21 @@ router.post('/:ticketId/approve', async (req, res) => {
 });
 
 // Admin rejects worker completion -> moves to REOPENED
-router.post('/:ticketId/reject', async (req, res) => {
+router.post('/:ticketId/reject', requireRole('admin'), async (req, res) => {
   try {
     const { reason } = req.body;
-    const actorId = req.headers['x-user-id'];
 
     const ticket = await Ticket.findById(req.params.ticketId);
     if (!ticket) {
       return res.status(404).json({ message: 'Ticket not found.' });
     }
 
-    const admin = actorId ? await User.findById(actorId) : null;
-    const adminName = admin ? admin.name : 'Municipal Supervisor';
+    if (!['PENDING_VERIFICATION', 'RESOLVED'].includes(ticket.status)) {
+      return res.status(409).json({ message: 'This complaint cannot be reopened from its current status.' });
+    }
+
+    const admin = req.user;
+    const adminName = admin.name;
 
     const prevStatus = ticket.status;
     ticket.status = 'REOPENED';
@@ -122,7 +130,7 @@ router.post('/:ticketId/reject', async (req, res) => {
       action: 'REOPENED',
       from_status: prevStatus,
       to_status: 'REOPENED',
-      performed_by: admin ? admin._id : null,
+      performed_by: admin._id,
       performed_by_name: adminName,
       performed_by_role: 'admin',
       notes: reason || 'Resolution proof insufficient. Additional repairs required.',
@@ -139,7 +147,7 @@ router.post('/:ticketId/reject', async (req, res) => {
         recipient_id: ticket.assigned_worker_id,
         title: 'Work Rejected / Reopened',
         message: `Task #${ticket._id.toString().slice(-4)} reopened: ${reason || 'Incomplete fix.'}`,
-        type: 'ticket_reopened',
+        type: 'citizen_feedback',
         ticket_id: ticket._id,
       });
     }
@@ -165,71 +173,60 @@ router.post('/:ticketId/reject', async (req, res) => {
 router.post('/:ticketId/citizen-feedback', async (req, res) => {
   try {
     const { rating, is_satisfied, reopen_requested, reopen_reason, proof_images } = req.body;
-    const actorId = req.headers['x-user-id'];
 
     const ticket = await Ticket.findById(req.params.ticketId);
     if (!ticket) {
       return res.status(404).json({ message: 'Ticket not found.' });
     }
 
-    const citizen = actorId ? await User.findById(actorId) : (ticket.citizen_id ? await User.findById(ticket.citizen_id) : null);
-    const citizenName = citizen ? citizen.name : 'Citizen';
+    if (req.user.role !== 'citizen' || !sameId(ticket.citizen_id, req.user._id)) {
+      return res.status(403).json({ message: 'Only the citizen who reported this complaint can submit feedback.' });
+    }
 
-    const feedback = await CitizenFeedback.create({
-      ticket_id: ticket._id,
-      citizen_id: citizen ? citizen._id : ticket.citizen_id,
-      rating: Number(rating) || 5,
-      is_satisfied: is_satisfied !== false,
-      reopen_requested: Boolean(reopen_requested),
-      reopen_reason: reopen_reason || '',
-      proof_images: Array.isArray(proof_images) ? proof_images : [],
-    });
+    const citizen = req.user;
+    const statusBeforeFeedback = ticket.status;
+    const requestedReview = Boolean(reopen_requested) || is_satisfied === false;
 
-    const io = req.app.get('io');
+    const feedback = await CitizenFeedback.findOneAndUpdate(
+      { ticket_id: ticket._id, citizen_id: citizen._id },
+      {
+        $set: {
+          rating: rating == null ? 5 : Number(rating),
+          is_satisfied: is_satisfied !== false,
+          reopen_requested: requestedReview,
+          reopen_reason: reopen_reason || '',
+          proof_images: Array.isArray(proof_images) ? proof_images : [],
+        },
+      },
+      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
+    );
 
-    // If citizen disputes and requests reopen
-    if (reopen_requested || is_satisfied === false) {
-      const prevStatus = ticket.status;
-      ticket.status = 'REOPENED';
-
-      ticket.history.push({
-        action: 'REOPENED',
-        from_status: prevStatus,
-        to_status: 'REOPENED',
-        performed_by: citizen ? citizen._id : null,
-        performed_by_name: citizenName,
-        performed_by_role: 'citizen',
-        notes: `Citizen disputed resolution: ${reopen_reason || 'Issue still persists.'}`,
-        timestamp: new Date(),
-      });
-
-      await ticket.save();
-
-      // Alert municipal admin
-      await dispatchNotification(io, {
-        role: 'admin',
-        title: 'Resolution Disputed by Citizen',
-        message: `${citizenName} disputed Ticket #${ticket._id.toString().slice(-4)}: "${reopen_reason || 'Unresolved'}"`,
-        type: 'ticket_reopened',
-        ticket_id: ticket._id,
-      });
-
+    if (requestedReview) {
+      const admins = await User.find({ role: 'admin' }).select('_id').lean();
+      const io = req.app.get('io');
+      await Promise.all(
+        admins.map((admin) => dispatchNotification(io, {
+          recipient_id: admin._id,
+          title: 'Citizen Review Requested',
+          message: `Citizen feedback requests administrative review for Ticket #${ticket._id.toString().slice(-4)}.`,
+          type: 'citizen_feedback',
+          ticket_id: ticket._id,
+        }))
+      );
       if (io) {
-        io.to(`ticket:${ticket._id}`).emit('ticket:status_change', {
-          ticketId: ticket._id,
-          from_status: prevStatus,
-          to_status: 'REOPENED',
-          ticket,
+        io.to('role:admin').emit('notification:new', {
+          title: 'Citizen Review Requested',
+          message: `Citizen feedback requests administrative review for Ticket #${ticket._id.toString().slice(-4)}.`,
+          type: 'ticket_reopened',
+          ticket_id: ticket._id,
         });
-        io.to('role:admin').emit('INCIDENT_UPDATED', ticket.toObject());
-        io.emit('INCIDENT_UPDATED', ticket.toObject());
       }
     }
 
     return res.status(201).json({
-      message: reopen_requested ? 'Dispute submitted. Issue has been reopened.' : 'Thank you for your feedback.',
+      message: 'Thank you for your feedback.',
       feedback,
-      ticket,
+      ticket: { ...ticket.toObject(), status: statusBeforeFeedback },
     });
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to submit citizen feedback.' });

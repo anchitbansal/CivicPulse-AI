@@ -6,12 +6,14 @@ import User from '../models/User.js';
 import { saveBufferLocally } from '../services/storageService.js';
 import { dispatchNotification } from '../services/notificationService.js';
 import { verifyResolution } from '../services/aiClient.js';
+import { requireRole } from '../middleware/auth.js';
+import { sameId } from '../middleware/access.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Assign a ticket to a field worker
-router.post('/', async (req, res) => {
+router.post('/', requireRole('admin'), async (req, res) => {
   try {
     const { ticket_id, worker_id, instructions, priority_override, sla_hours } = req.body;
     const actorId = req.headers['x-user-id'] || req.body.assigned_by;
@@ -129,6 +131,13 @@ router.patch('/:id/accept', async (req, res) => {
       return res.status(404).json({ message: 'Assignment not found.' });
     }
 
+    if (!['worker', 'supervisor'].includes(req.user.role) || !sameId(assignment.worker_id, req.user._id)) {
+      return res.status(403).json({ message: 'You can only accept an assignment that belongs to you.' });
+    }
+    if (assignment.status !== 'pending') {
+      return res.status(409).json({ message: 'Only pending assignments can be accepted.' });
+    }
+
     assignment.status = 'in_progress';
     assignment.accepted_at = new Date();
     await assignment.save();
@@ -202,6 +211,14 @@ router.post('/:id/complete', upload.array('proof_images', 5), async (req, res) =
 
     if (!ticket) {
       return res.status(404).json({ message: 'Ticket not found.' });
+    }
+
+    const assignedWorkerId = assignment?.worker_id || ticket.assigned_worker_id;
+    if (!['worker', 'supervisor'].includes(req.user.role) || !sameId(assignedWorkerId, req.user._id)) {
+      return res.status(403).json({ message: 'Only the assigned worker can submit completion proof.' });
+    }
+    if (!['ASSIGNED', 'IN_PROGRESS', 'REOPENED'].includes(ticket.status)) {
+      return res.status(409).json({ message: 'This complaint is not ready for completion proof.' });
     }
 
     // Save uploaded proof images
