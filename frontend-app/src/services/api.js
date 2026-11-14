@@ -14,7 +14,9 @@ const getHeaders = (extra = {}) => {
 // ==================== AUTH & DEMO PROFILES ====================
 
 export async function getDemoUsers() {
-  const res = await fetch(`${API_BASE}/api/auth/demo-users`);
+  const res = await fetch(`${API_BASE}/api/auth/demo-users`, {
+    headers: getHeaders(),
+  });
   if (!res.ok) throw new Error('Failed to load demo users');
   return res.json();
 }

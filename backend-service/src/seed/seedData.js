@@ -3,20 +3,107 @@ import Ticket from '../models/Ticket.js';
 import Assignment from '../models/Assignment.js';
 import Notification from '../models/Notification.js';
 import { hashPassword } from '../services/passwordService.js';
+import { logger, maskEmail } from '../services/logger.js';
+
+const DEMO_ACCOUNTS = [
+  {
+    name: 'Sarah Jenkins',
+    email: 'admin@civicpulse.gov',
+    role: 'admin',
+    department: 'General Administration',
+    assigned_ward: 'Central Ward',
+  },
+  {
+    name: 'Rajesh Kumar',
+    email: 'supervisor.rajesh@civicpulse.gov',
+    role: 'supervisor',
+    department: 'Roads & Infrastructure',
+    assigned_ward: 'Central Ward',
+  },
+  {
+    name: 'Carlos Mendez',
+    email: 'worker.carlos@civicpulse.gov',
+    role: 'worker',
+    department: 'Roads & Infrastructure',
+    assigned_ward: 'Central Ward',
+  },
+  {
+    name: 'Priya Sharma',
+    email: 'worker.priya@civicpulse.gov',
+    role: 'worker',
+    department: 'Sanitation & Waste',
+    assigned_ward: 'North Ward',
+  },
+  {
+    name: 'Marcus Vance',
+    email: 'worker.marcus@civicpulse.gov',
+    role: 'worker',
+    department: 'Electrical & Lighting',
+    assigned_ward: 'South Ward',
+  },
+  {
+    name: 'Alex Chen',
+    email: 'citizen.alex@example.com',
+    role: 'citizen',
+    assigned_ward: 'Central Ward',
+  },
+  {
+    name: 'Maya Patel',
+    email: 'citizen.maya@example.com',
+    role: 'citizen',
+    assigned_ward: 'North Ward',
+  },
+];
+
+async function ensureDemoAccounts() {
+  const demoPasswordHash = await hashPassword('CivicPulse123!');
+  let created = 0;
+  let updated = 0;
+  let alreadyPresent = 0;
+
+  for (const account of DEMO_ACCOUNTS) {
+    const existing = await User.findOne({ email: account.email }).select('+password_hash');
+    if (!existing) {
+      await User.create({ ...account, password_hash: demoPasswordHash });
+      created += 1;
+      continue;
+    }
+
+    if (existing.role !== account.role) {
+      logger.warn('Demo account email has an unexpected role; existing role preserved.', {
+        email: maskEmail(account.email),
+        expectedRole: account.role,
+        actualRole: existing.role,
+      });
+    }
+
+    if (!existing.password_hash) {
+      existing.password_hash = demoPasswordHash;
+      await existing.save();
+      updated += 1;
+    } else {
+      alreadyPresent += 1;
+    }
+  }
+
+  return { created, updated, alreadyPresent };
+}
 
 export const seedDatabaseIfNeeded = async () => {
   try {
+    logger.info('Database seeding started');
     const userCount = await User.countDocuments();
     if (userCount > 0) {
-      const demoPasswordHash = await hashPassword('CivicPulse123!');
-      await User.updateMany(
-        { password_hash: { $exists: false } },
-        { $set: { password_hash: demoPasswordHash } }
-      );
+      const demoAccounts = await ensureDemoAccounts();
+      logger.info('Database seeding completed', {
+        usersCreated: demoAccounts.created,
+        usersUpdated: demoAccounts.updated,
+        usersAlreadyPresent: userCount,
+      });
       return;
     }
 
-    console.log('🌱 Seeding database with initial multi-portal users and demo civic tickets...');
+    logger.info('Creating initial multi-portal demo data');
 
     // 1. Create Users
     const demoPasswordHash = await hashPassword('CivicPulse123!');
@@ -93,6 +180,12 @@ export const seedDatabaseIfNeeded = async () => {
         avatar_url: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150',
       },
     ].map((user) => ({ ...user, password_hash: demoPasswordHash })));
+
+    logger.info('Database seeding completed', {
+      usersCreated: users.length,
+      usersUpdated: 0,
+      usersAlreadyPresent: 0,
+    });
 
     const admin = users[0];
     const supervisor = users[1];
@@ -430,8 +523,16 @@ export const seedDatabaseIfNeeded = async () => {
       },
     ]);
 
-    console.log('✅ Database successfully seeded with multi-portal demo data.');
+    logger.info('Database seeding completed', {
+      usersCreated: users.length,
+      usersUpdated: 0,
+      usersAlreadyPresent: 0,
+    });
   } catch (error) {
-    console.error('Error during database seed:', error.message);
+    logger.error('Database seeding failed', {
+      message: error.message,
+      code: error.code || error.name || 'UNKNOWN',
+    });
+    throw error;
   }
 };

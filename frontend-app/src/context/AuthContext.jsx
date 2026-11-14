@@ -14,7 +14,7 @@ const AuthContext = createContext(null);
 
 function storeSession({ token, user }) {
   localStorage.setItem('civicpulse_auth_token', token);
-  localStorage.setItem('civicpulse_active_user_id', user._id);
+  localStorage.setItem('civicpulse_active_user_id', String(user._id));
   localStorage.setItem('civicpulse_active_role', user.role);
 }
 
@@ -25,6 +25,10 @@ export const AuthProvider = ({ children }) => {
   const [notifications, setNotifications] = useState([]);
 
   const setSession = useCallback((session) => {
+    const previousUserId = localStorage.getItem('civicpulse_active_user_id');
+    const previousRole = localStorage.getItem('civicpulse_active_role');
+    if (previousUserId && previousUserId !== String(session.user._id)) leaveUser(previousUserId);
+    if (previousRole && previousRole !== session.user.role) leaveRole(previousRole);
     storeSession(session);
     setCurrentUser(session.user);
     joinUser(session.user._id);
@@ -40,6 +44,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('civicpulse_active_user_id');
     localStorage.removeItem('civicpulse_active_role');
     setCurrentUser(null);
+    setDemoUsers([]);
     setNotifications([]);
   }, []);
 
@@ -55,20 +60,23 @@ export const AuthProvider = ({ children }) => {
       });
       if (!response.ok) throw new Error('Session expired');
       const user = await response.json();
-      setCurrentUser(user);
-      joinUser(user._id);
-      joinRole(user.role);
-      const users = await getDemoUsers();
-      setDemoUsers(users);
+      setSession({ token, user });
+      if (user.role === 'admin') {
+        try {
+          setDemoUsers(await getDemoUsers());
+        } catch (error) {
+          console.warn('Failed to load demo accounts:', error.message);
+          setDemoUsers([]);
+        }
+      } else {
+        setDemoUsers([]);
+      }
     } catch {
-      localStorage.removeItem('civicpulse_auth_token');
-      localStorage.removeItem('civicpulse_active_user_id');
-      localStorage.removeItem('civicpulse_active_role');
-      setCurrentUser(null);
+      logout();
     } finally {
       setLoading(false);
     }
-  }, [logout]);
+  }, [logout, setSession]);
 
   useEffect(() => {
     initAuth();
@@ -94,20 +102,24 @@ export const AuthProvider = ({ children }) => {
   const signIn = async (credentials) => {
     const session = await loginUser(credentials);
     setSession(session);
+    if (session.user.role === 'admin') {
+      try {
+        setDemoUsers(await getDemoUsers());
+      } catch (error) {
+        console.warn('Failed to load demo accounts:', error.message);
+        setDemoUsers([]);
+      }
+    } else {
+      setDemoUsers([]);
+    }
     return session.user;
   };
 
   const signUp = async (details) => {
     const session = await signupUser(details);
     setSession(session);
+    setDemoUsers([]);
     return session.user;
-  };
-
-  const switchUser = (user) => {
-    if (!user || !currentUser) return;
-    setCurrentUser(user);
-    localStorage.setItem('civicpulse_active_user_id', user._id);
-    localStorage.setItem('civicpulse_active_role', user.role);
   };
 
   const handleMarkRead = async (id) => {
@@ -129,7 +141,6 @@ export const AuthProvider = ({ children }) => {
       signIn,
       signUp,
       logout,
-      switchUser,
       notifications,
       unreadCount: notifications.filter((item) => !item.is_read).length,
       markNotificationRead: handleMarkRead,

@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 
 export default function RoleBanner() {
-  const { currentUser, currentRole, demoUsers, switchUser, logout, notifications, unreadCount, markNotificationRead, markAllNotificationsRead } = useAuth();
+  const { currentUser, currentRole, demoUsers, logout, notifications, unreadCount, markNotificationRead, markAllNotificationsRead } = useAuth();
   const navigate = useNavigate();
   const [showBellMenu, setShowBellMenu] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
@@ -42,13 +42,8 @@ export default function RoleBanner() {
   };
 
   const handleRoleQuickSwitch = (targetRole) => {
-    const targetUser = demoUsers.find((u) => u.role === targetRole);
-    if (targetUser) {
-      switchUser(targetUser);
-      if (targetRole === 'admin') navigate('/admin/dashboard');
-      else if (targetRole === 'worker' || targetRole === 'supervisor') navigate('/worker/dashboard');
-      else navigate('/citizen/dashboard');
-    }
+    logout();
+    navigate(`/login/${targetRole}`);
   };
 
   return (
@@ -124,11 +119,11 @@ export default function RoleBanner() {
                     key={user._id}
                     type="button"
                     onClick={() => {
-                      switchUser(user);
+                      logout();
                       setShowUserDropdown(false);
-                      if (user.role === 'admin') navigate('/admin/dashboard');
-                      else if (user.role === 'worker' || user.role === 'supervisor') navigate('/worker/dashboard');
-                      else navigate('/citizen/dashboard');
+                      navigate(`/login/${user.role}`, {
+                        state: { email: user.email },
+                      });
                     }}
                     className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-800/80 transition ${
                       currentUser?._id === user._id ? 'bg-blue-600/10 text-blue-400' : 'text-slate-300'

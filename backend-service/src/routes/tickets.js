@@ -5,6 +5,7 @@ import Ticket from '../models/Ticket.js';
 import { analyzeImage, verifyResolution } from '../services/aiClient.js';
 import { saveBufferLocally } from '../services/storageService.js';
 import { dispatchNotification } from '../services/notificationService.js';
+import { logger } from '../services/logger.js';
 import { requireRole } from '../middleware/auth.js';
 import {
   ADMIN_STATUS_TRANSITIONS,
@@ -245,6 +246,9 @@ router.post('/report', requireRole('citizen'), upload.single('image'), async (re
       await duplicateTicket.save();
 
       emitSocketEvent(req, 'INCIDENT_UPDATED', duplicateTicket.toObject());
+      logger.info('Complaint merged into existing ticket', {
+        ticketId: String(duplicateTicket._id),
+      });
       return res.status(200).json({
         message: 'Duplicate ticket merged into existing incident.',
         ticket: duplicateTicket,
@@ -280,6 +284,7 @@ router.post('/report', requireRole('citizen'), upload.single('image'), async (re
       status: 'REPORTED',
       zone,
       confidence: Number(aiResult.confidence || 0.8),
+      ai_analysis: aiResult,
       citizen_id: citizenUser?._id || null,
       upvote_count: 1,
       report_frequency: Number(report_frequency),
@@ -302,27 +307,41 @@ router.post('/report', requireRole('citizen'), upload.single('image'), async (re
 
     const io = req.app.get('io');
 
-    // Notify administrators
-    await dispatchNotification(io, {
-      role: 'admin',
-      title: 'New Incident Reported',
-      message: `A ${newTicket.defect_type} (${newTicket.severity}) was reported in ${newTicket.location?.ward || 'Central Ward'}.`,
-      type: 'ticket_created',
-      ticket_id: newTicket._id,
-    });
+    try {
+      await dispatchNotification(io, {
+        role: 'admin',
+        title: 'New Incident Reported',
+        message: `A ${newTicket.defect_type} (${newTicket.severity}) was reported in ${newTicket.location?.ward || 'Central Ward'}.`,
+        type: 'ticket_created',
+        ticket_id: newTicket._id,
+      });
+    } catch (notificationError) {
+      logger.warn('Complaint saved but admin notification failed', {
+        ticketId: String(newTicket._id),
+        message: notificationError.message,
+        code: notificationError.code || notificationError.name || 'UNKNOWN',
+      });
+    }
 
     emitSocketEvent(req, 'INCIDENT_CREATED', newTicket.toObject());
     if (io) {
       io.to('role:admin').emit('INCIDENT_CREATED', newTicket.toObject());
     }
 
+    logger.info('Complaint created', {
+      ticketId: String(newTicket._id),
+      defectType: newTicket.defect_type,
+    });
     return res.status(201).json({
       message: 'Ticket created successfully.',
       ticket: newTicket,
       merged: false,
     });
   } catch (error) {
-    console.error('Report error:', error);
+    logger.error('Complaint creation failed', {
+      message: error.message,
+      code: error.code || error.name || 'UNKNOWN',
+    });
     return res.status(500).json({ message: error.message || 'Failed to report ticket.' });
   }
 });

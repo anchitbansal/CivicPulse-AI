@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowRight, HardHat, ShieldCheck, UserRound } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const portalConfig = {
   citizen: { label: 'Citizen portal', icon: UserRound, dashboard: '/citizen/dashboard' },
   worker: { label: 'Field worker portal', icon: HardHat, dashboard: '/worker/dashboard' },
+  supervisor: { label: 'Supervisor portal', icon: HardHat, dashboard: '/worker/dashboard' },
   admin: { label: 'Admin command portal', icon: ShieldCheck, dashboard: '/admin/dashboard' },
 };
 
@@ -14,8 +15,14 @@ export default function AuthPage({ mode = 'login' }) {
   const config = portalConfig[role] || portalConfig.citizen;
   const Icon = config.icon;
   const navigate = useNavigate();
+  const location = useLocation();
   const { signIn, signUp } = useAuth();
-  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '' });
+  const [form, setForm] = useState({
+    name: '',
+    email: location.state?.email || '',
+    phone: '',
+    password: '',
+  });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -75,7 +82,7 @@ export default function AuthPage({ mode = 'login' }) {
           </div>
           <div className="mt-5 pt-5 border-t border-slate-200 dark:border-slate-700 text-center text-xs text-slate-500">
             {mode === 'login' && (
-              <span>Choose another portal: <Link className="text-brand-600 hover:underline" to="/login/citizen">Citizen</Link> · <Link className="text-brand-600 hover:underline" to="/login/worker">Worker</Link> · <Link className="text-brand-600 hover:underline" to="/login/admin">Admin</Link></span>
+              <span>Choose another portal: <Link className="text-brand-600 hover:underline" to="/login/citizen">Citizen</Link> · <Link className="text-brand-600 hover:underline" to="/login/worker">Worker</Link> · <Link className="text-brand-600 hover:underline" to="/login/supervisor">Supervisor</Link> · <Link className="text-brand-600 hover:underline" to="/login/admin">Admin</Link></span>
             )}
           </div>
         </section>
